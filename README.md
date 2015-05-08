@@ -1,6 +1,6 @@
-# repos
+# repo
 
-repos is a utility to extract and present data about TV4 repositories.
+repo is a utility to extract and present data about GitHub repositories.
 
 ## Actions
 

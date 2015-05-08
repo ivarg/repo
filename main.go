@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -10,7 +11,7 @@ import (
 )
 
 var (
-	token = "c44e3d56df8b535aa0b21e422f103f86d950b527"
+	token string
 	owner *string
 
 	cmds = map[string]command{
@@ -21,6 +22,13 @@ var (
 )
 
 type command func(args ...string)
+
+func init() {
+	token = os.Getenv("GH_TOKEN")
+	if token == "" {
+		log.Fatal("Error: No GH_TOKEN found")
+	}
+}
 
 func main() {
 	if len(os.Args) == 1 {
