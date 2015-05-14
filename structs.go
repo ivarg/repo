@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+type ghError struct {
+	Message string `json:"message"`
+}
+
 type ghSearchRes struct {
 	Items []ghSearchItem `json:"items"`
 }
@@ -72,4 +76,8 @@ func (l ghLangs) String() string {
 	}
 	s = strings.TrimRight(s, ", ")
 	return s
+}
+
+type ghContent struct {
+	Content string `json:"content"`
 }

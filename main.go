@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -18,15 +20,17 @@ var (
 		"info":   info,
 		"search": search,
 		"list":   list,
+		"cat":    cat,
 	}
 )
 
 type command func(args ...string)
 
 func init() {
-	token = os.Getenv("GH_TOKEN")
+	token = os.Getenv("GITHUB_API_TOKEN")
 	if token == "" {
-		log.Fatal("Error: No GH_TOKEN found")
+		fmt.Println("repo needs GITHUB_API_TOKEN to be set to a valid GitHub API token")
+		os.Exit(1)
 	}
 }
 
@@ -54,6 +58,7 @@ Commands:
   info       Print a brief summary about a repository
   search     Search the file contents in a repository
   list       List all repositories pertaining to a user or organization
+  cat        Print the contents of a file
 
 Examples:
 
@@ -110,13 +115,53 @@ func search(args ...string) {
 	if ur := strings.Split(args[1], "/"); len(ur) > 1 {
 		owner = ur[0]
 		repo := ur[1]
-		dosearch(fmt.Sprintf("https://api.github.com/search/code?q=\"%s\"+repo:%s/%s", q, owner, repo))
+		searchRepo(q, owner, repo)
 		return
 	}
-	dosearch(fmt.Sprintf("https://api.github.com/search/code?q=\"%s\"+user:%s", q, owner))
+	searchOwner(q, owner)
 }
 
-func dosearch(u string) {
+func searchOwner(q, owner string) {
+	res := dosearch(fmt.Sprintf("https://api.github.com/search/code?q=\"%s\"+user:%s", q, owner))
+	hits := make(map[string]int)
+	for _, item := range res.Items {
+		cnt := hits[item.Repo.Name]
+		hits[item.Repo.Name] = cnt + len(item.Matches)
+	}
+	for r, m := range hits {
+		fmt.Printf("%s: %d files with matches\n", r, m)
+	}
+}
+
+type hit struct {
+	file string
+	line int
+	frag string
+}
+
+func searchRepo(q, owner, repo string) {
+	res := dosearch(fmt.Sprintf("https://api.github.com/search/code?q=\"%s\"+repo:%s/%s", q, owner, repo))
+	hits := make(map[string]int)
+	for _, item := range res.Items {
+		hits[item.trimPath()] = 0
+	}
+	if len(hits) == 0 {
+		return
+	}
+	re := regexp.MustCompile(q)
+	for f, _ := range hits {
+		fmt.Printf("%s:\n", f)
+		content := getfile(owner, repo, f)
+		lines := strings.Split(content, "\n")
+		for i, l := range lines {
+			if re.MatchString(l) {
+				fmt.Printf("  %d %s\n", i+1, l)
+			}
+		}
+	}
+}
+
+func dosearch(u string) ghSearchRes {
 	req, _ := http.NewRequest("GET", u, nil)
 	req.Header.Add("Authorization", fmt.Sprintf("token %s", token))
 	req.Header.Add("Accept", "application/vnd.github.v3.text-match+json")
@@ -130,7 +175,7 @@ func dosearch(u string) {
 		panic(err)
 	}
 
-	fmt.Println(rr)
+	return rr
 }
 
 func list(args ...string) {
@@ -193,4 +238,42 @@ func usertype(owner string) string {
 		panic(err)
 	}
 	return rr["type"].(string)
+}
+
+func cat(args ...string) {
+	pth := strings.Split(args[0], "/")
+	o, repo := pth[0], pth[1]
+	file := strings.Join(pth[2:], "/")
+
+	fmt.Println(getfile(o, repo, file))
+}
+
+func getfile(owner, repo, file string) string {
+	u := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, file)
+	req, _ := http.NewRequest("GET", u, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("token %s", token))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	b, _ := ioutil.ReadAll(resp.Body)
+
+	var emsg ghError
+	json.Unmarshal(b, &emsg)
+	if emsg.Message != "" {
+		fmt.Printf("Error: %s\n", emsg.Message)
+		os.Exit(1)
+	}
+
+	var c ghContent
+	if err = json.Unmarshal(b, &c); err != nil {
+		panic(err)
+	}
+
+	txt, err := base64.StdEncoding.DecodeString(c.Content)
+	if err != nil {
+		log.Fatal("Error:", err)
+	}
+
+	return string(txt)
 }
