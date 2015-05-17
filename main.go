@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -122,6 +123,7 @@ func search(args ...string) {
 }
 
 func searchOwner(q, owner string) {
+	q = url.QueryEscape(q)
 	res := dosearch(fmt.Sprintf("https://api.github.com/search/code?q=\"%s\"+user:%s", q, owner))
 	hits := make(map[string]int)
 	for _, item := range res.Items {
@@ -129,7 +131,7 @@ func searchOwner(q, owner string) {
 		hits[item.Repo.Name] = cnt + len(item.Matches)
 	}
 	for r, m := range hits {
-		fmt.Printf("%s: %d files with matches\n", r, m)
+		fmt.Printf("  %s: %d files with matches\n", r, m)
 	}
 }
 
@@ -140,6 +142,7 @@ type hit struct {
 }
 
 func searchRepo(q, owner, repo string) {
+	q = url.QueryEscape(q)
 	res := dosearch(fmt.Sprintf("https://api.github.com/search/code?q=\"%s\"+repo:%s/%s", q, owner, repo))
 	hits := make(map[string]int)
 	for _, item := range res.Items {
@@ -148,6 +151,7 @@ func searchRepo(q, owner, repo string) {
 	if len(hits) == 0 {
 		return
 	}
+	q, _ = url.QueryUnescape(q)
 	re := regexp.MustCompile(q)
 	for f, _ := range hits {
 		fmt.Printf("%s:\n", f)
@@ -162,20 +166,41 @@ func searchRepo(q, owner, repo string) {
 }
 
 func dosearch(u string) ghSearchRes {
-	req, _ := http.NewRequest("GET", u, nil)
-	req.Header.Add("Authorization", fmt.Sprintf("token %s", token))
-	req.Header.Add("Accept", "application/vnd.github.v3.text-match+json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	var rr ghSearchRes
-	dec := json.NewDecoder(resp.Body)
-	if err = dec.Decode(&rr); err != nil {
-		panic(err)
+	var res ghSearchRes
+	paging := u + "&page=%d"
+	for i := 1; true; i++ {
+		req, _ := http.NewRequest("GET", fmt.Sprintf(paging, i), nil)
+		req.Header.Add("Authorization", fmt.Sprintf("token %s", token))
+		req.Header.Add("Accept", "application/vnd.github.v3.text-match+json")
+		// Debug print corresponding curl statement
+		//curl := fmt.Sprintf("curl -H \"Authorization: token %s\" -H \"Accept: %s\" %s", token, req.Header.Get("Accept"), u)
+		//fmt.Println(curl)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+		var rr ghSearchRes
+		if err = json.Unmarshal(b, &rr); err != nil {
+			panic(err)
+		}
+		res.Items = append(res.Items, rr.Items...)
+
+		// If link then more pages
+		link := resp.Header.Get("Link")
+		match, err := regexp.MatchString("rel=\"next\"", link)
+		if err != nil {
+			panic(err)
+		}
+		if !match {
+			break
+		}
 	}
 
-	return rr
+	return res
 }
 
 func list(args ...string) {
