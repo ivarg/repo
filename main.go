@@ -167,13 +167,13 @@ func searchRepo(q, owner, repo string) {
 
 func dosearch(u string) ghSearchRes {
 	var res ghSearchRes
-	paging := u + "&page=%d"
+	paging := "&page=%d"
 	for i := 1; true; i++ {
-		req, _ := http.NewRequest("GET", fmt.Sprintf(paging, i), nil)
+		req, _ := http.NewRequest("GET", u+fmt.Sprintf(paging, i), nil)
 		req.Header.Add("Authorization", fmt.Sprintf("token %s", token))
 		req.Header.Add("Accept", "application/vnd.github.v3.text-match+json")
 		// Debug print corresponding curl statement
-		//curl := fmt.Sprintf("curl -H \"Authorization: token %s\" -H \"Accept: %s\" %s", token, req.Header.Get("Accept"), u)
+		//curl := fmt.Sprintf("curl -H \"Authorization: token %s\" -H \"Accept: %s\" %s", token, req.Header.Get("Accept"), u+fmt.Sprintf(paging, i))
 		//fmt.Println(curl)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -183,6 +183,7 @@ func dosearch(u string) ghSearchRes {
 		if err != nil {
 			panic(err)
 		}
+		//fmt.Println(string(b))
 		var rr ghSearchRes
 		if err = json.Unmarshal(b, &rr); err != nil {
 			panic(err)
