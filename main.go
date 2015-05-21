@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -36,23 +37,24 @@ func init() {
 }
 
 func main() {
-	if len(os.Args) == 1 {
+	flag.Parse()
+	if len(flag.Args()) == 0 {
 		printUsage()
 		return
 	}
-	cmd, ok := cmds[os.Args[1]]
+	cmd, ok := cmds[flag.Arg(0)]
 	if !ok {
 		fmt.Println("unknown command")
 		printUsage()
 		return
 	}
-	cmd(os.Args[2:]...)
+	cmd(flag.Args()[1:]...)
 }
 
 func printUsage() {
 	fmt.Println(`Repo is a tool for querying GitHub repositories from the command line
 
-usage: repo <command> [<args>]
+  Usage: repo <command> [<args>]
 
 Commands:
 
@@ -75,6 +77,10 @@ Examples:
 }
 
 func info(args ...string) {
+	if len(args) == 0 {
+		fmt.Println("  Usage: repo info <user><repository>\n")
+		os.Exit(1)
+	}
 	repo := args[0]
 	u := fmt.Sprintf("https://api.github.com/repos/%s", repo)
 	req, _ := http.NewRequest("GET", u, nil)
@@ -111,6 +117,10 @@ func langs(repo string) ghLangs {
 
 // args[0] == "search"
 func search(args ...string) {
+	if len(args) < 2 {
+		fmt.Println("  Usage: repo search <query> <user>[/<repository>]\n")
+		os.Exit(1)
+	}
 	q := args[0]
 	owner := args[1]
 	if ur := strings.Split(args[1], "/"); len(ur) > 1 {
@@ -205,6 +215,10 @@ func dosearch(u string) ghSearchRes {
 }
 
 func list(args ...string) {
+	if len(args) == 0 {
+		fmt.Println("  Usage: repo list <user>\n")
+		os.Exit(1)
+	}
 	owner := args[0]
 	utempl := "https://api.github.com/users/%s/repos?page=%d"
 	if usertype(owner) == "Organization" {
@@ -267,7 +281,15 @@ func usertype(owner string) string {
 }
 
 func cat(args ...string) {
+	if len(args) != 1 {
+		fmt.Println("  Usage: repo cat <user>/<repository>/<path>\n")
+		os.Exit(1)
+	}
 	pth := strings.Split(args[0], "/")
+	if len(pth) != 3 {
+		fmt.Println("  Usage: repo cat <user>/<repository>/<path>\n")
+		os.Exit(1)
+	}
 	o, repo := pth[0], pth[1]
 	file := strings.Join(pth[2:], "/")
 
@@ -287,7 +309,7 @@ func getfile(owner, repo, file string) string {
 	var emsg ghError
 	json.Unmarshal(b, &emsg)
 	if emsg.Message != "" {
-		fmt.Printf("Error: %s\n", emsg.Message)
+		fmt.Printf("  Error: %s\n", emsg.Message)
 		os.Exit(1)
 	}
 
