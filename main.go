@@ -66,13 +66,14 @@ Commands:
 Examples:
 
   Print a short summary of repository 'myrepo', owned by kitty
-  repos info kitty/myrepo
+  $ repo info kitty/myrepo
 
   Search through user kitty's repository 'myrepo' for occurrences of the string
   "http.StatusBadRequest".
-  repos search http\.StatusBadRequest kitty/myrepo
+  $ repo search http\.StatusBadRequest kitty/myrepo
 
-  repos search "package main" kitty
+  Enclose multi-word search terms in quotes.
+  $ repo search "package main" kitty
 `)
 }
 
